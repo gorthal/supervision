@@ -29,6 +29,18 @@ $apiUrl = $config['server']['api_url'];
 $apiKey = $config['server']['api_key'];
 $lastRunFile = __DIR__ . '/last_run.json';
 
+// Récupération des patterns d'erreur et des erreurs à ignorer
+$errorPatterns = $config['error_patterns'] ?? [];
+$ignoreErrors = [];
+if (isset($config['ignore_errors']['patterns']) && is_array($config['ignore_errors']['patterns'])) {
+    $ignoreErrors = $config['ignore_errors']['patterns'];
+}
+
+// Pattern par défaut pour Laravel si aucun pattern spécifique n'est fourni
+if (empty($errorPatterns)) {
+    $errorPatterns['laravel_error'] = '/\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] (\w+)\.(\w+): (.*) in (.*):(\d+)/';
+}
+
 // Fonction pour trouver tous les projets Laravel
 function findLaravelProjects($directory, $maxDepth, $currentDepth = 0) {
     $projects = [];
@@ -65,8 +77,8 @@ function findLaravelProjects($directory, $maxDepth, $currentDepth = 0) {
     return $projects;
 }
 
-// Fonction pour analyser les logs d'erreurs
-function parseErrorLogs($logPath, $lastRunData) {
+// Fonction pour analyser les logs d'erreurs avec les patterns configurés
+function parseErrorLogs($logPath, $lastRunData, $errorPatterns, $ignoreErrors) {
     $errors = [];
     $lastChecked = $lastRunData[$logPath] ?? 0;
     $currentTime = time();
@@ -79,21 +91,94 @@ function parseErrorLogs($logPath, $lastRunData) {
             $lines = explode("\n", $content);
             
             foreach ($lines as $line) {
-                // Détecter les lignes d'erreur (format Laravel)
-                if (preg_match('/\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] (\w+)\.(\w+): (.*) in (.*):(\d+)/', $line, $matches)) {
-                    $timestamp = strtotime($matches[1]);
-                    
-                    // Ignorer les erreurs avant la dernière exécution
-                    if ($timestamp > $lastChecked) {
-                        $errors[] = [
-                            'project_name' => basename(dirname($logPath)),
-                            'environment' => basename($logFile, '.log'),
-                            'error_message' => $matches[4],
-                            'file' => $matches[5],
-                            'line' => (int)$matches[6],
-                            'level' => strtolower($matches[3]),
-                            'timestamp' => date('c', $timestamp)
-                        ];
+                // Ignorer les lignes vides
+                if (empty(trim($line))) {
+                    continue;
+                }
+                
+                $errorFound = false;
+                $errorType = '';
+                $errorData = [];
+                
+                // Tester chaque pattern d'erreur
+                foreach ($errorPatterns as $type => $pattern) {
+                    if (preg_match($pattern, $line, $matches)) {
+                        // Vérifier si le type d'erreur doit être ignoré
+                        if (in_array(strtolower($type), array_map('strtolower', $ignoreErrors))) {
+                            continue;
+                        }
+                        
+                        $errorFound = true;
+                        $errorType = $type;
+                        $errorData = $matches;
+                        break;
+                    }
+                }
+                
+                if ($errorFound) {
+                    // Format standard Laravel - priorité si ce pattern est détecté
+                    if ($errorType === 'laravel_error' && isset($errorData[1], $errorData[2], $errorData[3], $errorData[4])) {
+                        $timestamp = strtotime($errorData[1]);
+                        
+                        // Vérifier si l'erreur est survenue après la dernière vérification
+                        if ($timestamp > $lastChecked) {
+                            // Extraire le fichier et la ligne si disponible dans le message
+                            $filePath = '';
+                            $lineNumber = 0;
+                            
+                            if (preg_match('/in (.*):(\d+)$/', $errorData[4], $fileMatches)) {
+                                $filePath = $fileMatches[1];
+                                $lineNumber = (int)$fileMatches[2];
+                                $errorMessage = trim(str_replace(" in {$filePath}:{$lineNumber}", '', $errorData[4]));
+                            } else {
+                                $errorMessage = $errorData[4];
+                            }
+                            
+                            $errors[] = [
+                                'project_name' => basename(dirname($logPath)),
+                                'environment' => basename($logFile, '.log'),
+                                'error_message' => $errorMessage,
+                                'file' => $filePath,
+                                'line' => $lineNumber,
+                                'level' => strtolower($errorData[3]),
+                                'error_type' => $errorType,
+                                'timestamp' => date('c', $timestamp)
+                            ];
+                        }
+                    } 
+                    // Autres types d'erreurs
+                    else {
+                        // Extraire les informations d'erreur selon le type
+                        $timestamp = time(); // Par défaut, utiliser l'heure actuelle
+                        $errorMessage = $line;
+                        $filePath = '';
+                        $lineNumber = 0;
+                        $level = 'error'; // Niveau par défaut
+                        
+                        // Extraire l'heure si elle apparaît dans le format standard
+                        if (preg_match('/\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]/', $line, $timeMatches)) {
+                            $timestamp = strtotime($timeMatches[1]);
+                        }
+                        
+                        // Extraire le fichier et la ligne pour les erreurs PHP standard
+                        if (preg_match('/in (.+) on line (\d+)/', $line, $fileMatches)) {
+                            $filePath = $fileMatches[1];
+                            $lineNumber = (int)$fileMatches[2];
+                        }
+                        
+                        // Vérifier si l'erreur est survenue après la dernière vérification
+                        if ($timestamp > $lastChecked) {
+                            $errors[] = [
+                                'project_name' => basename(dirname($logPath)),
+                                'environment' => basename($logFile, '.log'),
+                                'error_message' => $errorMessage,
+                                'file' => $filePath,
+                                'line' => $lineNumber,
+                                'level' => $level,
+                                'error_type' => $errorType,
+                                'timestamp' => date('c', $timestamp)
+                            ];
+                        }
                     }
                 }
             }
@@ -141,7 +226,7 @@ $allErrors = [];
 
 foreach ($projects as $project) {
     echo "Analyse des logs pour {$project['name']}...\n";
-    list($errors, $currentTime) = parseErrorLogs($project['log_path'], $lastRunData);
+    list($errors, $currentTime) = parseErrorLogs($project['log_path'], $lastRunData, $errorPatterns, $ignoreErrors);
     
     if (!empty($errors)) {
         echo "  " . count($errors) . " nouvelles erreurs trouvées\n";
