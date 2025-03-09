@@ -90,7 +90,12 @@ L'agent de surveillance est un simple script PHP qui doit être installé sur ch
 
 1. Copiez le dossier `agent` sur votre serveur.
 
-2. Configurez le fichier `config.ini` :
+2. Configurez le fichier `.env` :
+   ```
+   cp .env.example .env
+   ```
+
+3. Modifiez le fichier `.env` avec les valeurs appropriées :
    ```ini
    [general]
    root_directory = "/var/www"  ; Répertoire racine de la recherche
@@ -101,12 +106,12 @@ L'agent de surveillance est un simple script PHP qui doit être installé sur ch
    api_key = "VOTRE_CLE_API"    ; Clé API générée dans l'interface d'administration
    ```
 
-3. Testez l'agent manuellement :
+4. Testez l'agent manuellement :
    ```
    php /chemin/vers/agent/agent.php
    ```
 
-4. Ajoutez une tâche CRON pour l'exécuter régulièrement :
+5. Ajoutez une tâche CRON pour l'exécuter régulièrement :
    ```
    * * * * * php /chemin/vers/agent/agent.php
    ```
@@ -125,7 +130,7 @@ Après l'installation, vous devez créer au moins un projet dans l'interface d'a
 
 ### Configuration de l'agent
 
-Modifiez le fichier `config.ini` de l'agent avec :
+Modifiez le fichier `.env` de l'agent avec :
 
 1. Le chemin vers les projets Laravel à surveiller.
 2. L'URL de votre serveur central.
