@@ -5,9 +5,15 @@
  */
 
 // Chargement des configurations
-$config = parse_ini_file(__DIR__ . '/config.ini', true);
+if (file_exists(__DIR__ . '/.env')) {
+    $config = parse_ini_file(__DIR__ . '/.env', true);
+} else {
+    // Rétrocompatibilité avec l'ancien fichier de configuration
+    $config = parse_ini_file(__DIR__ . '/config.ini', true);
+}
+
 if (!$config) {
-    echo "Erreur: Impossible de charger le fichier config.ini\n";
+    echo "Erreur: Impossible de charger le fichier de configuration (.env ou config.ini)\n";
     exit(1);
 }
 
