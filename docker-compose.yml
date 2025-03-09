@@ -1,0 +1,66 @@
+version: '3'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: supervision-app
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - ./:/var/www
+    networks:
+      - supervision
+
+  db:
+    image: mysql:8.0
+    container_name: supervision-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-supervision}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-secret}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-secret}
+      MYSQL_USER: ${DB_USERNAME:-supervision}
+      SERVICE_TAGS: dev
+      SERVICE_NAME: mysql
+    volumes:
+      - supervision-mysql:/var/lib/mysql
+    networks:
+      - supervision
+
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: supervision-nginx
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    volumes:
+      - ./:/var/www
+      - ./docker/nginx:/etc/nginx/conf.d
+    networks:
+      - supervision
+
+  redis:
+    image: redis:7-alpine
+    container_name: supervision-redis
+    restart: unless-stopped
+    networks:
+      - supervision
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: supervision-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - supervision
+
+networks:
+  supervision:
+    driver: bridge
+
+volumes:
+  supervision-mysql:
