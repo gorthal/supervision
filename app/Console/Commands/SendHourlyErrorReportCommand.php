@@ -16,14 +16,14 @@ class SendHourlyErrorReportCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'supervision:send-hourly-error-report {email?} {--period=1hour}';
+    protected $signature = 'supervision:send-hourly-error-report {email?} {--period=24hours}';
 
     /**
      * The console command description.
      *
      * @var string
      */
-    protected $description = 'Envoie un rapport d\'erreur par email avec les erreurs des dernières heures';
+    protected $description = 'Envoie un rapport d\'erreur par email avec les erreurs de la journée';
 
     /**
      * Execute the console command.
@@ -33,19 +33,21 @@ class SendHourlyErrorReportCommand extends Command
         $email = $this->argument('email') ?? config('supervision.admin_email', 'admin@example.com');
         $period = $this->option('period');
         
-        // Déterminer la période (par défaut : 1 heure)
+        // Déterminer la période (par défaut : 24 heures / 1 journée)
         $since = match($period) {
             '1hour' => Carbon::now()->subHour(),
             '6hours' => Carbon::now()->subHours(6),
             '12hours' => Carbon::now()->subHours(12),
             '24hours' => Carbon::now()->subDay(),
-            default => Carbon::now()->subHour(),
+            '48hours' => Carbon::now()->subDays(2),
+            '7days' => Carbon::now()->subDays(7),
+            default => Carbon::now()->subDay(),
         };
         
         // Récupérer toutes les erreurs depuis la période spécifiée
         $errors = ErrorLog::where('created_at', '>=', $since)
             ->with('project')
-            ->orderBy('created_at', 'desc')
+            ->orderBy('created_at', 'desc') // Les plus récentes en premier
             ->get();
             
         // S'il n'y a pas d'erreurs, on peut terminer
@@ -59,10 +61,26 @@ class SendHourlyErrorReportCommand extends Command
             return $error->project->name ?? 'Sans projet';
         });
         
+        // Pour chaque projet, on s'assure que les erreurs sont triées par date (les plus récentes en premier)
+        foreach ($errorsByProject as $projectName => $projectErrors) {
+            $errorsByProject[$projectName] = $projectErrors->sortByDesc('created_at');
+        }
+        
         // Compter le nombre total d'erreurs
         $totalErrors = $errors->count();
         $criticalErrors = $errors->where('level', 'error')->count();
         $warningErrors = $errors->where('level', 'warning')->count();
+        
+        // Période formatée pour le sujet de l'email
+        $periodText = match($period) {
+            '1hour' => 'dernière heure',
+            '6hours' => '6 dernières heures',
+            '12hours' => '12 dernières heures',
+            '24hours' => 'dernière journée',
+            '48hours' => '2 derniers jours',
+            '7days' => '7 derniers jours',
+            default => 'dernière journée',
+        };
         
         // Envoyer l'email
         try {
@@ -76,10 +94,11 @@ class SendHourlyErrorReportCommand extends Command
                     'warningErrors' => $warningErrors,
                     'since' => $since->format('d/m/Y H:i'),
                     'period' => $period,
+                    'periodText' => $periodText,
                 ],
-                function ($message) use ($email, $totalErrors) {
+                function ($message) use ($email, $totalErrors, $periodText) {
                     $message->to($email)
-                        ->subject("Rapport de supervision : {$totalErrors} erreurs détectées");
+                        ->subject("Rapport de supervision : {$totalErrors} erreurs détectées dans la {$periodText}");
                 }
             );
             
