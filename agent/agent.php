@@ -200,16 +200,41 @@ function sendErrorsToServer($errors, $apiUrl, $apiKey) {
         return false;
     }
     
-    // S'assurer que l'URL se termine par 'api/logs'
+    // Essayer différentes variations d'URL
+    $urlVariations = [
+        $apiUrl, // URL originale fournie dans la config
+    ];
+    
+    // 1. Essayer avec /api/logs
     if (!preg_match('#/api/logs$#', $apiUrl)) {
-        // Ajuster l'URL pour qu'elle se termine par api/logs
         if (substr($apiUrl, -1) === '/') {
-            $apiUrl .= 'api/logs';
+            $urlVariations[] = $apiUrl . 'api/logs';
         } else {
-            $apiUrl .= '/api/logs';
+            $urlVariations[] = $apiUrl . '/api/logs';
         }
-        echo "URL ajustée: {$apiUrl}\n";
     }
+    
+    // 2. Essayer sans /api (au cas où le préfixe est déjà inclus dans l'URL de base)
+    if (preg_match('#/api/logs$#', $apiUrl)) {
+        $urlVariations[] = preg_replace('#/api/logs$#', '/logs', $apiUrl);
+    } else if (!preg_match('#/logs$#', $apiUrl)) {
+        if (substr($apiUrl, -1) === '/') {
+            $urlVariations[] = $apiUrl . 'logs';
+        } else {
+            $urlVariations[] = $apiUrl . '/logs';
+        }
+    }
+    
+    // 3. Essayer l'URL de base pure sans aucun chemin
+    $parsedUrl = parse_url($apiUrl);
+    $baseUrl = $parsedUrl['scheme'] . '://' . $parsedUrl['host'];
+    if (isset($parsedUrl['port'])) {
+        $baseUrl .= ':' . $parsedUrl['port'];
+    }
+    $urlVariations[] = $baseUrl . '/api/logs';
+    
+    // Supprimer les doublons
+    $urlVariations = array_unique($urlVariations);
     
     // Préparation du payload JSON et vérification
     $jsonPayload = json_encode($errors);
@@ -218,66 +243,96 @@ function sendErrorsToServer($errors, $apiUrl, $apiKey) {
         return false;
     }
     
-    // Initialisation de CURL avec des options additionnelles
-    $ch = curl_init($apiUrl);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonPayload);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json',
-        'Authorization: Bearer ' . $apiKey,
-        'Content-Length: ' . strlen($jsonPayload),
-        'Accept: application/json' // Assurer que nous voulons une réponse JSON
-    ]);
-    
-    // Options additionnelles pour le debug
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30); // 30 secondes de timeout
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 15); // 15 secondes pour la connexion
-    curl_setopt($ch, CURLOPT_VERBOSE, true);
-    
-    // Capturer et afficher les erreurs SSL
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
-
-    // Suivre les redirections (au cas où)
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-    curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
-    
-    // Exécution de la requête
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    
-    // En cas d'erreur, capturer les détails
-    if ($response === false) {
-        $curlError = curl_error($ch);
-        $curlErrorNo = curl_errno($ch);
-        echo "Erreur CURL: [{$curlErrorNo}] {$curlError}\n";
-        curl_close($ch);
-        return false;
-    }
-    
-    // Vérifier la réponse HTTP
-    if ($httpCode < 200 || $httpCode >= 300) {
-        echo "Erreur HTTP: Code {$httpCode}\n";
-        echo "Réponse du serveur: " . substr($response, 0, 1000) . "\n";
-        curl_close($ch);
-        return false;
-    }
-    
-    // Fermer la session CURL
-    curl_close($ch);
-    
-    // Tenter de décoder la réponse JSON pour plus d'informations
-    $decodedResponse = json_decode($response, true);
-    if (json_last_error() === JSON_ERROR_NONE && isset($decodedResponse['status'])) {
-        echo "Statut de la réponse: {$decodedResponse['status']}\n";
-        
-        if (isset($decodedResponse['message'])) {
-            echo "Message: {$decodedResponse['message']}\n";
+    // Vérifier les données à envoyer
+    foreach ($errors as &$error) {
+        // S'assurer que les champs requis sont présents
+        if (empty($error['file'])) {
+            $error['file'] = 'unknown';
+        }
+        if (empty($error['line']) || !is_numeric($error['line'])) {
+            $error['line'] = 0;
         }
     }
     
-    return true;
+    // Essayer chaque variation d'URL
+    $successFound = false;
+    
+    echo "Tentative d'envoi avec plusieurs variantes d'URL...\n";
+    
+    foreach ($urlVariations as $testUrl) {
+        echo "Test avec l'URL: {$testUrl}\n";
+        
+        // Initialisation de CURL
+        $ch = curl_init($testUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonPayload);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . $apiKey,
+            'Content-Length: ' . strlen($jsonPayload),
+            'Accept: application/json'
+        ]);
+        
+        // Options additionnelles
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_VERBOSE, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
+        
+        // Exécuter la requête
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        
+        // Vérifier s'il y a une erreur CURL
+        if ($response === false) {
+            $curlError = curl_error($ch);
+            $curlErrorNo = curl_errno($ch);
+            echo "  Erreur CURL: [{$curlErrorNo}] {$curlError}\n";
+            curl_close($ch);
+            continue; // Essayer la prochaine URL
+        }
+        
+        // Vérifier le code HTTP
+        if ($httpCode < 200 || $httpCode >= 300) {
+            echo "  Erreur HTTP: Code {$httpCode}\n";
+            if ($httpCode == 404) {
+                echo "  URL non trouvée, essai de la prochaine variante...\n";
+                curl_close($ch);
+                continue; // Essayer la prochaine URL
+            }
+            echo "  Réponse du serveur: " . substr($response, 0, 500) . "\n";
+            curl_close($ch);
+            continue; // Essayer la prochaine URL
+        }
+        
+        // Succès ! Tenter de décoder la réponse JSON
+        $decodedResponse = json_decode($response, true);
+        if (json_last_error() === JSON_ERROR_NONE && isset($decodedResponse['status'])) {
+            echo "  Statut de la réponse: {$decodedResponse['status']}\n";
+            if (isset($decodedResponse['message'])) {
+                echo "  Message: {$decodedResponse['message']}\n";
+            }
+        } else {
+            echo "  Réponse brute du serveur: " . substr($response, 0, 500) . "\n";
+        }
+        
+        curl_close($ch);
+        $successFound = true;
+        
+        // Sauvegarder l'URL qui fonctionne pour les prochaines exécutions
+        if ($testUrl !== $apiUrl) {
+            echo "URL fonctionnelle trouvée! Mise à jour recommandée du fichier de configuration.\n";
+            echo "Remplacez l'URL actuelle par: {$testUrl}\n";
+        }
+        
+        break; // Sortir de la boucle, nous avons trouvé une URL qui fonctionne
+    }
+    
+    return $successFound;
 }
 
 // Charger les données de la dernière exécution
@@ -309,25 +364,14 @@ foreach ($projects as $project) {
 // Envoyer les erreurs au serveur central
 if (!empty($allErrors)) {
     echo "Envoi de " . count($allErrors) . " erreurs au serveur central...\n";
-    echo "URL API: " . $apiUrl . "\n";
-    
-    // Vérifier les données à envoyer
-    foreach ($allErrors as &$error) {
-        // S'assurer que les champs requis sont présents
-        if (empty($error['file'])) {
-            $error['file'] = 'unknown';
-        }
-        if (empty($error['line']) || !is_numeric($error['line'])) {
-            $error['line'] = 0;
-        }
-    }
+    echo "URL API configurée: " . $apiUrl . "\n";
     
     // Afficher un aperçu des données à envoyer
     $firstError = reset($allErrors);
     echo "Exemple d'erreur à envoyer: Projet={$firstError['project_name']}, Message={$firstError['error_message']}\n";
     
     $success = sendErrorsToServer($allErrors, $apiUrl, $apiKey);
-    echo $success ? "Envoi réussi\n" : "Erreur lors de l'envoi\n";
+    echo $success ? "Envoi réussi\n" : "Erreur lors de l'envoi avec toutes les variantes d'URL\n";
 }
 
 // Sauvegarder les données de la dernière exécution
