@@ -1,120 +1,104 @@
-# Supervision - Système de suivi des erreurs pour Laravel
+# Système de Supervision
 
-Une alternative légère et auto-hébergée à Sentry/Highlight.io pour centraliser et suivre les erreurs générées par plusieurs projets Laravel.
-
-![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)
-![PHP](https://img.shields.io/badge/PHP-8.1+-purple.svg)
-![Laravel](https://img.shields.io/badge/Laravel-11.x-red.svg)
+Un outil de supervision de logs basé sur des agents distants et un tableau de bord.
 
 ## Fonctionnalités
 
-- Détection automatique des projets Laravel sur un serveur
-- Centralisation des erreurs de plusieurs projets
-- Tableau de bord pour suivre les erreurs en temps réel
-- Tri et filtrage des erreurs par niveau, projet, statut
-- Gestion des statuts d'erreurs (nouveau, en cours, résolu, ignoré)
-- Alertes par email (temps réel, résumé horaire ou quotidien)
-- Interface moderne et réactive avec Filament
+- Détection automatique des projets Laravel
+- Analyse des fichiers de logs et détection des erreurs
+- Tableau de bord centralisé pour visualiser toutes les erreurs
+- Classification des erreurs par sévérité, projet, environnement
+- Notifications par email pour les nouvelles erreurs
+- Rapports horaires et quotidiens des erreurs
 
-## Architecture du système
+## Structure du projet
 
-Le système est composé de deux parties :
+- **agent/** - Agent à installer sur les serveurs à surveiller
+- **app/** - Application Laravel principale (tableau de bord)
+- **config/** - Fichiers de configuration
 
-1. **Agent de surveillance** - Script PHP déployé sur chaque serveur
-   - Détecte automatiquement les projets Laravel
-   - Analyse les logs d'erreurs
-   - Envoie les nouvelles erreurs au serveur central
+## Installation du tableau de bord
 
-2. **Serveur central** - Application Laravel
-   - Tableau de bord pour suivre les erreurs
-   - Gestion des statuts (traité, ignoré, etc.)
-   - Vue détaillée des erreurs par projet
-   - Envoi d'alertes par email
-
-## Captures d'écran
-
-*À venir...*
-
-## Prérequis
-
-- PHP 8.1 ou supérieur
-- Composer
-- MySQL ou PostgreSQL
-- Serveur web (Nginx, Apache)
-
-## Installation rapide
-
-### Agent de surveillance
-
-1. Copiez le dossier `agent` sur votre serveur 
-2. Configurez le fichier `config.ini`
-3. Ajoutez une tâche CRON pour l'exécuter régulièrement:
-   ```
-   * * * * * php /path/to/agent/agent.php
-   ```
-
-### Serveur central
-
-1. Clonez ce dépôt
-   ```
-   git clone https://github.com/gorthal/supervision.git
-   cd supervision
-   ```
-
-2. Installez les dépendances
-   ```
+1. Cloner le dépôt
+2. Installer les dépendances
+   ```bash
    composer install
+   npm install
    ```
-
-3. Configurez le fichier `.env`
-   ```
-   cp .env.example .env
-   php artisan key:generate
-   ```
-
-4. Configurez votre base de données dans le fichier `.env`
-
-5. Lancez les migrations
-   ```
+3. Configurer la base de données dans `.env`
+4. Exécuter les migrations
+   ```bash
    php artisan migrate
    ```
-
-6. Créez un utilisateur administrateur
-   ```
-   php artisan make:filament-user
-   ```
-
-7. Démarrez le serveur
-   ```
-   php artisan serve
+5. Compiler les assets
+   ```bash
+   npm run build
    ```
 
-8. Accédez à l'interface d'administration à l'adresse `http://localhost:8000/admin`
+## Configuration de l'agent
 
-## Documentation
+1. Copier le dossier `agent/` sur le serveur à surveiller
+2. Créer un fichier `.env` dans le dossier de l'agent avec ces paramètres :
+   ```
+   [general]
+   root_directory=/chemin/vers/projets
+   max_depth=3
 
-Consultez le [Wiki](https://github.com/gorthal/supervision/wiki) pour une documentation complète.
+   [server]
+   api_url=https://votreserveur.com/api/logs
+   api_key=VOTRE_API_KEY
+   ```
+3. Exécuter l'agent périodiquement via cron :
+   ```
+   */5 * * * * cd /chemin/vers/agent && php agent.php >> /var/log/supervision-agent.log 2>&1
+   ```
 
-## Développement
+## Configuration des rapports par email
 
-### Stack technique
+### Configuration système
 
-- Agent: PHP 7.4+
-- Serveur central: Laravel 11, MySQL/PostgreSQL
-- Frontend: TailwindCSS, Livewire, PhpFilament
+1. Assurez-vous que votre configuration email Laravel est correcte dans le fichier `.env`.
+2. Configurez l'adresse email d'administration qui recevra les rapports :
+   ```
+   SUPERVISION_ADMIN_EMAIL=votre@email.com
+   ```
 
-### Contribution
+### Installation automatique du cron
 
-Les contributions sont les bienvenues ! Consultez les [issues](https://github.com/gorthal/supervision/issues) pour voir les fonctionnalités à implémenter.
+Un script d'installation automatique est inclus. Pour l'installer :
 
-## Licence
+```bash
+sudo chmod +x install-cron.sh
+sudo ./install-cron.sh votre@email.com
+```
 
-Ce projet est sous licence MIT. Voir le fichier [LICENSE](LICENSE) pour plus de détails.
+Ce script configurera un cron pour envoyer un rapport d'erreurs toutes les heures à l'adresse email spécifiée.
 
-## À venir
+### Installation manuelle du cron
 
-- Intégration avec Slack/Discord
-- Graphiques d'erreurs par jour/semaine
-- Système de priorisation des erreurs
-- Détection automatique des projets via Composer
-- Plus de fonctionnalités de filtrage
+Si vous préférez configurer manuellement le cron :
+
+```bash
+crontab -e
+```
+
+Puis ajoutez la ligne suivante :
+
+```
+0 * * * * cd /var/www/html && php artisan supervision:send-hourly-error-report votre@email.com >> /var/log/supervision-cron.log 2>&1
+```
+
+### Personnalisation des rapports
+
+Vous pouvez spécifier la période du rapport avec l'option `--period` :
+
+```bash
+# Pour un rapport des 6 dernières heures
+php artisan supervision:send-hourly-error-report votre@email.com --period=6hours
+
+# Périodes disponibles: 1hour (défaut), 6hours, 12hours, 24hours
+```
+
+## Licences et contributions
+
+Ce projet est sous licence MIT. Les contributions sont les bienvenues.
