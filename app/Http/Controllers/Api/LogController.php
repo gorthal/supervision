@@ -47,13 +47,8 @@ class LogController extends Controller
 
             foreach ($errors as $errorData) {
                 $validator = Validator::make($errorData, [
-                    'project_name'  => 'string',
-                    'environment'   => 'string',
-                    'error_message' => 'string',
-                    'file'          => 'string',
-                    'line'          => 'integer',
-                    'level'         => 'string',
-                    'timestamp'     => 'string',
+                    'project_name' => 'string',
+
                 ]);
 
                 if ($validator->fails()) {
