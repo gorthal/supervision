@@ -72,7 +72,7 @@ sudo chmod +x install-cron.sh
 sudo ./install-cron.sh votre@email.com
 ```
 
-Ce script configurera un cron pour envoyer un rapport d'erreurs toutes les heures à l'adresse email spécifiée.
+Ce script configurera un cron pour envoyer un rapport d'erreurs toutes les heures à l'adresse email spécifiée. Le rapport contiendra toutes les erreurs des dernières 24 heures, avec les erreurs récentes (dernière heure) mises en évidence.
 
 ### Installation manuelle du cron
 
@@ -85,7 +85,7 @@ crontab -e
 Puis ajoutez la ligne suivante :
 
 ```
-0 * * * * cd /var/www/html && php artisan supervision:send-hourly-error-report votre@email.com >> /var/log/supervision-cron.log 2>&1
+0 * * * * cd /var/www/html && php artisan supervision:send-hourly-error-report votre@email.com --period=24hours >> /var/log/supervision-cron.log 2>&1
 ```
 
 ### Personnalisation des rapports
@@ -93,11 +93,27 @@ Puis ajoutez la ligne suivante :
 Vous pouvez spécifier la période du rapport avec l'option `--period` :
 
 ```bash
-# Pour un rapport des 6 dernières heures
-php artisan supervision:send-hourly-error-report votre@email.com --period=6hours
+# Pour un rapport des dernières 24 heures (par défaut)
+php artisan supervision:send-hourly-error-report votre@email.com --period=24hours
 
-# Périodes disponibles: 1hour (défaut), 6hours, 12hours, 24hours
+# Autres périodes disponibles
+php artisan supervision:send-hourly-error-report votre@email.com --period=1hour
+php artisan supervision:send-hourly-error-report votre@email.com --period=6hours
+php artisan supervision:send-hourly-error-report votre@email.com --period=12hours
+php artisan supervision:send-hourly-error-report votre@email.com --period=48hours
+php artisan supervision:send-hourly-error-report votre@email.com --period=7days
 ```
+
+## Format du rapport d'erreurs
+
+Le rapport envoyé par email contient :
+
+1. Un résumé statistique avec le nombre total d'erreurs, erreurs critiques et avertissements
+2. Les erreurs groupées par projet
+3. Les erreurs les plus récentes (dernière heure) sont mises en évidence et affichées avec un indicateur de temps relatif
+4. Les erreurs plus anciennes sont affichées avec date et heure
+
+Les rapports sont envoyés toutes les heures mais contiennent toujours les erreurs de la journée entière, pour vous permettre de ne rater aucune erreur si vous manquez un email.
 
 ## Licences et contributions
 
