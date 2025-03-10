@@ -200,6 +200,17 @@ function sendErrorsToServer($errors, $apiUrl, $apiKey) {
         return false;
     }
     
+    // S'assurer que l'URL se termine par 'api/logs'
+    if (!preg_match('#/api/logs$#', $apiUrl)) {
+        // Ajuster l'URL pour qu'elle se termine par api/logs
+        if (substr($apiUrl, -1) === '/') {
+            $apiUrl .= 'api/logs';
+        } else {
+            $apiUrl .= '/api/logs';
+        }
+        echo "URL ajustée: {$apiUrl}\n";
+    }
+    
     // Préparation du payload JSON et vérification
     $jsonPayload = json_encode($errors);
     if (json_last_error() !== JSON_ERROR_NONE) {
@@ -215,7 +226,8 @@ function sendErrorsToServer($errors, $apiUrl, $apiKey) {
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'Content-Type: application/json',
         'Authorization: Bearer ' . $apiKey,
-        'Content-Length: ' . strlen($jsonPayload)
+        'Content-Length: ' . strlen($jsonPayload),
+        'Accept: application/json' // Assurer que nous voulons une réponse JSON
     ]);
     
     // Options additionnelles pour le debug
@@ -226,6 +238,10 @@ function sendErrorsToServer($errors, $apiUrl, $apiKey) {
     // Capturer et afficher les erreurs SSL
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+
+    // Suivre les redirections (au cas où)
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
     
     // Exécution de la requête
     $response = curl_exec($ch);
@@ -294,6 +310,17 @@ foreach ($projects as $project) {
 if (!empty($allErrors)) {
     echo "Envoi de " . count($allErrors) . " erreurs au serveur central...\n";
     echo "URL API: " . $apiUrl . "\n";
+    
+    // Vérifier les données à envoyer
+    foreach ($allErrors as &$error) {
+        // S'assurer que les champs requis sont présents
+        if (empty($error['file'])) {
+            $error['file'] = 'unknown';
+        }
+        if (empty($error['line']) || !is_numeric($error['line'])) {
+            $error['line'] = 0;
+        }
+    }
     
     // Afficher un aperçu des données à envoyer
     $firstError = reset($allErrors);
