@@ -18,6 +18,9 @@ class Kernel extends ConsoleKernel
         // Envoyer les digests quotidiens à 9h du matin
         $schedule->command('supervision:send-daily-digests')->dailyAt('09:00');
         
+        // Envoyer un rapport d'erreurs par email toutes les heures
+        $schedule->command('supervision:send-hourly-error-report')->hourly();
+        
         // Maintenance - Purger les erreurs anciennes (plus de 30 jours) marquées comme résolues ou ignorées
         $schedule->command('supervision:purge-old-errors')->weekly();
     }
