@@ -38,7 +38,7 @@ if (isset($config['ignore_errors']['patterns']) && is_array($config['ignore_erro
 
 // Pattern par défaut pour Laravel si aucun pattern spécifique n'est fourni
 if (empty($errorPatterns)) {
-    $errorPatterns['laravel_error'] = '/\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] (\w+)\.(\w+): (.*) in (.*):(\d+)/';
+    $errorPatterns['laravel_error'] = '/\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] (\w+)\.(\w+): (.*) in (.*):(\\d+)/';
 }
 
 // Fonction pour trouver tous les projets Laravel
@@ -126,7 +126,7 @@ function parseErrorLogs($logPath, $lastRunData, $errorPatterns, $ignoreErrors) {
                             $filePath = '';
                             $lineNumber = 0;
                             
-                            if (preg_match('/in (.*):(\d+)$/', $errorData[4], $fileMatches)) {
+                            if (preg_match('/in (.*):(\\d+)$/', $errorData[4], $fileMatches)) {
                                 $filePath = $fileMatches[1];
                                 $lineNumber = (int)$fileMatches[2];
                                 $errorMessage = trim(str_replace(" in {$filePath}:{$lineNumber}", '', $errorData[4]));
@@ -161,7 +161,7 @@ function parseErrorLogs($logPath, $lastRunData, $errorPatterns, $ignoreErrors) {
                         }
                         
                         // Extraire le fichier et la ligne pour les erreurs PHP standard
-                        if (preg_match('/in (.+) on line (\d+)/', $line, $fileMatches)) {
+                        if (preg_match('/in (.+) on line (\\d+)/', $line, $fileMatches)) {
                             $filePath = $fileMatches[1];
                             $lineNumber = (int)$fileMatches[2];
                         }
@@ -194,20 +194,74 @@ function sendErrorsToServer($errors, $apiUrl, $apiKey) {
         return true;
     }
     
+    // Vérification préliminaire que l'URL est valide
+    if (!filter_var($apiUrl, FILTER_VALIDATE_URL)) {
+        echo "Erreur: URL invalide: {$apiUrl}\n";
+        return false;
+    }
+    
+    // Préparation du payload JSON et vérification
+    $jsonPayload = json_encode($errors);
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        echo "Erreur: Impossible d'encoder les données en JSON: " . json_last_error_msg() . "\n";
+        return false;
+    }
+    
+    // Initialisation de CURL avec des options additionnelles
     $ch = curl_init($apiUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($errors));
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonPayload);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'Content-Type: application/json',
-        'Authorization: Bearer ' . $apiKey
+        'Authorization: Bearer ' . $apiKey,
+        'Content-Length: ' . strlen($jsonPayload)
     ]);
     
+    // Options additionnelles pour le debug
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30); // 30 secondes de timeout
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 15); // 15 secondes pour la connexion
+    curl_setopt($ch, CURLOPT_VERBOSE, true);
+    
+    // Capturer et afficher les erreurs SSL
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+    
+    // Exécution de la requête
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    
+    // En cas d'erreur, capturer les détails
+    if ($response === false) {
+        $curlError = curl_error($ch);
+        $curlErrorNo = curl_errno($ch);
+        echo "Erreur CURL: [{$curlErrorNo}] {$curlError}\n";
+        curl_close($ch);
+        return false;
+    }
+    
+    // Vérifier la réponse HTTP
+    if ($httpCode < 200 || $httpCode >= 300) {
+        echo "Erreur HTTP: Code {$httpCode}\n";
+        echo "Réponse du serveur: " . substr($response, 0, 1000) . "\n";
+        curl_close($ch);
+        return false;
+    }
+    
+    // Fermer la session CURL
     curl_close($ch);
     
-    return $httpCode >= 200 && $httpCode < 300;
+    // Tenter de décoder la réponse JSON pour plus d'informations
+    $decodedResponse = json_decode($response, true);
+    if (json_last_error() === JSON_ERROR_NONE && isset($decodedResponse['status'])) {
+        echo "Statut de la réponse: {$decodedResponse['status']}\n";
+        
+        if (isset($decodedResponse['message'])) {
+            echo "Message: {$decodedResponse['message']}\n";
+        }
+    }
+    
+    return true;
 }
 
 // Charger les données de la dernière exécution
@@ -239,6 +293,12 @@ foreach ($projects as $project) {
 // Envoyer les erreurs au serveur central
 if (!empty($allErrors)) {
     echo "Envoi de " . count($allErrors) . " erreurs au serveur central...\n";
+    echo "URL API: " . $apiUrl . "\n";
+    
+    // Afficher un aperçu des données à envoyer
+    $firstError = reset($allErrors);
+    echo "Exemple d'erreur à envoyer: Projet={$firstError['project_name']}, Message={$firstError['error_message']}\n";
+    
     $success = sendErrorsToServer($allErrors, $apiUrl, $apiKey);
     echo $success ? "Envoi réussi\n" : "Erreur lors de l'envoi\n";
 }
