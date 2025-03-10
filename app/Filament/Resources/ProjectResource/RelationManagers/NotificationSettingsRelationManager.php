@@ -57,6 +57,7 @@ class NotificationSettingsRelationManager extends RelationManager
                 Forms\Components\TimePicker::make('daily_time')
                     ->label('Heure d\'envoi (résumé quotidien)')
                     ->seconds(false)
+                    ->format('H:i')
                     ->default('09:00')
                     ->visible(fn (callable $get) => $get('frequency') === 'daily'),
             ]);
@@ -105,7 +106,7 @@ class NotificationSettingsRelationManager extends RelationManager
                 
                 Tables\Columns\TextColumn::make('daily_time')
                     ->label('Heure d\'envoi')
-                    ->time('H:i')
+                    ->date('H:i')
                     ->visible(fn ($livewire): bool => $livewire->getTableModel()::query()->where('frequency', 'daily')->exists()),
             ])
             ->filters([
