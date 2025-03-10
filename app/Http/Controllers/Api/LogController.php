@@ -40,20 +40,20 @@ class LogController extends Controller
             }
 
             // Handle single error or array of errors
-            $data = $request->all();
+            $data   = $request->all();
             $errors = is_array($data) && isset($data[0]) ? $data : [$data];
 
             $processedCount = 0;
 
             foreach ($errors as $errorData) {
                 $validator = Validator::make($errorData, [
-                    'project_name' => 'required|string',
-                    'environment' => 'required|string',
-                    'error_message' => 'required|string',
-                    'file' => 'required|string',
-                    'line' => 'required|integer',
-                    'level' => 'required|string',
-                    'timestamp' => 'required|string',
+                    'project_name'  => 'string',
+                    'environment'   => 'string',
+                    'error_message' => 'string',
+                    'file'          => 'string',
+                    'line'          => 'integer',
+                    'level'         => 'string',
+                    'timestamp'     => 'string',
                 ]);
 
                 if ($validator->fails()) {
@@ -71,44 +71,45 @@ class LogController extends Controller
                 if ($existingError) {
                     // Increment occurrences count
                     $existingError->incrementOccurrences();
-                    
+
                     // Only update timestamp if newer
                     $newTimestamp = new \DateTime($errorData['timestamp']);
                     if ($newTimestamp > $existingError->error_timestamp) {
                         $existingError->error_timestamp = $newTimestamp;
                         $existingError->save();
                     }
-                } else {
+                }
+                else {
                     // Create new error log
                     $errorLog = new ErrorLog([
-                        'project_id' => $project->id,
-                        'environment' => $errorData['environment'],
-                        'error_message' => $errorData['error_message'],
-                        'file_path' => $errorData['file'],
-                        'line' => $errorData['line'],
-                        'level' => strtolower($errorData['level']),
+                        'project_id'      => $project->id,
+                        'environment'     => $errorData['environment'],
+                        'error_message'   => $errorData['error_message'],
+                        'file_path'       => $errorData['file'],
+                        'line'            => $errorData['line'],
+                        'level'           => strtolower($errorData['level']),
                         'error_timestamp' => $errorData['timestamp'],
-                        'status' => 'new',
+                        'status'          => 'new',
                     ]);
-                    
+
                     $errorLog->save();
-                    
+
                     // Send notifications for new errors
                     $this->notificationService->notifyNewError($errorLog);
                 }
-                
+
                 $processedCount++;
             }
 
             return response()->json([
-                'status' => 'success', 
+                'status'  => 'success',
                 'message' => "Processed $processedCount error logs"
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error('Error processing logs', ['exception' => $e->getMessage()]);
             return response()->json([
-                'status' => 'error', 
+                'status'  => 'error',
                 'message' => 'An error occurred while processing logs'
             ], 500);
         }

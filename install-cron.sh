@@ -5,20 +5,21 @@
 
 # Configuration
 PROJECT_PATH="/var/www/html"
-LOG_FILE="/var/log/supervision-cron.log"
+LOG_FILE="/var/www/html/supervision-cron.log"
 PHP_PATH=$(which php)
-EMAIL=${1:-"admin@example.com"}
+#EMAIL=${1:-"admin@example.com"}
+EMAIL="mb@isdea.fr"
 
 # Vérifier que le script est exécuté en tant que root ou avec sudo
-if [ "$EUID" -ne 0 ]; then
-  echo "Ce script doit être exécuté en tant que root ou avec sudo"
-  exit 1
-fi
+#if [ "$EUID" -ne 0 ]; then
+#  echo "Ce script doit être exécuté en tant que root ou avec sudo"
+#  exit 1
+#fi
 
 # Créer le fichier log s'il n'existe pas
-touch $LOG_FILE
-chown www-data:www-data $LOG_FILE
-chmod 644 $LOG_FILE
+#touch $LOG_FILE
+#chown www-data:www-data $LOG_FILE
+#chmod 644 $LOG_FILE
 
 # Créer l'entrée crontab
 CRON_ENTRY="0 * * * * cd $PROJECT_PATH && $PHP_PATH artisan supervision:send-hourly-error-report $EMAIL --period=24hours >> $LOG_FILE 2>&1"
