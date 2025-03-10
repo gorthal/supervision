@@ -65,6 +65,15 @@
         .error-item:last-child {
             border-bottom: none;
         }
+        .error-item.recent {
+            background-color: #f7fafc;
+            border-left: 3px solid #5c6ac4;
+        }
+        .error-timestamp {
+            color: #718096;
+            font-size: 13px;
+            margin-right: 10px;
+        }
         .error-level {
             display: inline-block;
             padding: 3px 8px;
@@ -106,12 +115,16 @@
             color: #718096;
             text-align: center;
         }
+        .timeago {
+            font-weight: bold;
+            color: #2d3748;
+        }
     </style>
 </head>
 <body>
     <div class="header">
         <h1>Rapport d'erreurs - Supervision</h1>
-        <p>Rapport généré le {{ now()->format('d/m/Y à H:i') }} pour la période depuis {{ $since }}</p>
+        <p>Rapport généré le {{ now()->format('d/m/Y à H:i') }} pour la {{ $periodText }}</p>
     </div>
 
     <div class="stats">
@@ -129,6 +142,11 @@
         </div>
     </div>
 
+    @php
+        $now = \Carbon\Carbon::now();
+        $oneHourAgo = $now->copy()->subHour();
+    @endphp
+
     @foreach($errorsByProject as $projectName => $projectErrors)
     <div class="project-section">
         <div class="project-header">
@@ -136,10 +154,18 @@
         </div>
         <ul class="error-list">
             @foreach($projectErrors as $error)
-            <li class="error-item">
+            @php
+                $isRecent = $error->created_at->isAfter($oneHourAgo);
+                $timeAgo = $error->created_at->diffForHumans();
+            @endphp
+            <li class="error-item {{ $isRecent ? 'recent' : '' }}">
                 <div>
+                    @if($isRecent)
+                        <span class="timeago">{{ $timeAgo }}</span>
+                    @else
+                        <span class="error-timestamp">{{ $error->created_at->format('d/m/Y H:i') }}</span>
+                    @endif
                     <span class="error-level {{ $error->level }}">{{ $error->level }}</span>
-                    <span>{{ $error->created_at->format('d/m/Y H:i') }}</span>
                 </div>
                 <div class="error-message">{{ Str::limit($error->error_message, 100) }}</div>
                 <div class="error-details">
