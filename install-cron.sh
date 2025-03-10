@@ -21,7 +21,7 @@ chown www-data:www-data $LOG_FILE
 chmod 644 $LOG_FILE
 
 # Créer l'entrée crontab
-CRON_ENTRY="0 * * * * cd $PROJECT_PATH && $PHP_PATH artisan supervision:send-hourly-error-report $EMAIL >> $LOG_FILE 2>&1"
+CRON_ENTRY="0 * * * * cd $PROJECT_PATH && $PHP_PATH artisan supervision:send-hourly-error-report $EMAIL --period=24hours >> $LOG_FILE 2>&1"
 
 # Installer le cron pour www-data
 (crontab -u www-data -l 2>/dev/null || echo "") | grep -v "supervision:send-hourly-error-report" | (cat; echo "$CRON_ENTRY") | crontab -u www-data -
@@ -30,8 +30,10 @@ echo "==========================================="
 echo "Installation du cron terminée !"
 echo "Le rapport d'erreurs sera envoyé à : $EMAIL"
 echo "Le cron s'exécutera toutes les heures à 0 minutes"
+echo "Le rapport contiendra toutes les erreurs des dernières 24 heures"
+echo "Les erreurs de la dernière heure seront mises en évidence"
 echo "Les logs seront écrits dans : $LOG_FILE"
 echo ""
 echo "Pour tester immédiatement, exécutez :"
-echo "sudo -u www-data $PHP_PATH $PROJECT_PATH/artisan supervision:send-hourly-error-report $EMAIL"
+echo "sudo -u www-data $PHP_PATH $PROJECT_PATH/artisan supervision:send-hourly-error-report $EMAIL --period=24hours"
 echo "==========================================="
