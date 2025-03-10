@@ -23,37 +23,37 @@ class NotificationSettingsRelationManager extends RelationManager
                     ->email()
                     ->required()
                     ->maxLength(255),
-                
+
                 Forms\Components\Grid::make(2)
                     ->schema([
                         Forms\Components\Toggle::make('notify_new')
                             ->label('Notifier les nouvelles erreurs')
                             ->default(true),
-                        
+
                         Forms\Components\Toggle::make('notify_critical')
                             ->label('Notifier les erreurs critiques')
                             ->default(true),
-                        
+
                         Forms\Components\Toggle::make('notify_error')
                             ->label('Notifier les erreurs')
                             ->default(true),
-                        
+
                         Forms\Components\Toggle::make('notify_warning')
                             ->label('Notifier les avertissements')
                             ->default(false),
                     ]),
-                
+
                 Forms\Components\Select::make('frequency')
                     ->label('Fréquence')
                     ->options([
                         'realtime' => 'Temps réel',
-                        'hourly' => 'Résumé horaire',
-                        'daily' => 'Résumé quotidien',
+                        'hourly'   => 'Résumé horaire',
+                        'daily'    => 'Résumé quotidien',
                     ])
                     ->default('realtime')
                     ->required()
                     ->reactive(),
-                
+
                 Forms\Components\TimePicker::make('daily_time')
                     ->label('Heure d\'envoi (résumé quotidien)')
                     ->seconds(false)
@@ -71,23 +71,23 @@ class NotificationSettingsRelationManager extends RelationManager
                 Tables\Columns\TextColumn::make('email')
                     ->label('Email')
                     ->searchable(),
-                
+
                 Tables\Columns\IconColumn::make('notify_new')
                     ->label('Nouvelles erreurs')
                     ->boolean(),
-                
+
                 Tables\Columns\IconColumn::make('notify_critical')
                     ->label('Erreurs critiques')
                     ->boolean(),
-                
+
                 Tables\Columns\IconColumn::make('notify_error')
                     ->label('Erreurs')
                     ->boolean(),
-                
+
                 Tables\Columns\IconColumn::make('notify_warning')
                     ->label('Avertissements')
                     ->boolean(),
-                
+
                 Tables\Columns\TextColumn::make('frequency')
                     ->label('Fréquence')
                     ->badge()
@@ -103,19 +103,19 @@ class NotificationSettingsRelationManager extends RelationManager
                         'daily' => 'success',
                         default => 'gray',
                     }),
-                
+
                 Tables\Columns\TextColumn::make('daily_time')
                     ->label('Heure d\'envoi')
-                    ->date('H:i')
-                    ->visible(fn ($livewire): bool => $livewire->getTableModel()::query()->where('frequency', 'daily')->exists()),
+                    ->date('H:i'),
+                //->visible(fn ($livewire): bool => $livewire->getTableModel()::query()->where('frequency', 'daily')->exists()),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('frequency')
                     ->label('Fréquence')
                     ->options([
                         'realtime' => 'Temps réel',
-                        'hourly' => 'Résumé horaire',
-                        'daily' => 'Résumé quotidien',
+                        'hourly'   => 'Résumé horaire',
+                        'daily'    => 'Résumé quotidien',
                     ]),
             ])
             ->headerActions([
