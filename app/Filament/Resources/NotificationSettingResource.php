@@ -15,17 +15,17 @@ use Illuminate\Database\Eloquent\Builder;
 class NotificationSettingResource extends Resource
 {
     protected static ?string $model = NotificationSetting::class;
-    
+
     protected static ?string $navigationIcon = 'heroicon-o-bell-alert';
-    
+
     protected static ?string $navigationGroup = 'Supervision';
-    
+
     protected static ?int $navigationSort = 30;
-    
+
     protected static ?string $navigationLabel = 'Notification Settings';
-    
+
     protected static ?string $modelLabel = 'Notification Setting';
-    
+
     protected static ?string $pluralModelLabel = 'Notification Settings';
 
     public static function form(Form $form): Form
@@ -34,41 +34,42 @@ class NotificationSettingResource extends Resource
             ->schema([
                 Forms\Components\Section::make('Notification Details')
                     ->schema([
-                        Forms\Components\TextInput::make('name')
-                            ->required()
-                            ->maxLength(255),
+
                         Forms\Components\TextInput::make('email')
+                            ->label('Destinataire')
+                            ->required()
                             ->email()
                             ->maxLength(255),
-                        Forms\Components\TextInput::make('slack_webhook_url')
-                            ->url()
-                            ->maxLength(255),
+
                         Forms\Components\Toggle::make('is_active')
                             ->default(true)
                             ->label('Active'),
                     ])->columns(2),
-                    
+
                 Forms\Components\Section::make('Notification Triggers')
                     ->schema([
-                        Forms\Components\Toggle::make('notify_on_error')
+                        Forms\Components\Toggle::make('notify_new')
+                            ->default(true)
+                            ->label('Notify on New'),
+                        Forms\Components\Toggle::make('notify_error')
                             ->default(true)
                             ->label('Notify on Error'),
-                        Forms\Components\Toggle::make('notify_on_warning')
+                        Forms\Components\Toggle::make('notify_warning')
                             ->default(true)
                             ->label('Notify on Warning'),
-                        Forms\Components\Toggle::make('notify_on_info')
+                        Forms\Components\Toggle::make('notify_info')
                             ->default(false)
                             ->label('Notify on Info'),
-                        Forms\Components\Select::make('notification_frequency')
+                        Forms\Components\Select::make('frequency')
                             ->options([
-                                'immediate' => 'Immediate',
-                                'hourly' => 'Hourly Digest',
-                                'daily' => 'Daily Digest',
+                                'realtime' => 'Immediate',
+                                'hourly'   => 'Hourly Digest',
+                                'daily'    => 'Daily Digest',
                             ])
-                            ->default('immediate')
+                            ->default('hourly')
                             ->required(),
                     ])->columns(2),
-                    
+
                 Forms\Components\Section::make('Project')
                     ->schema([
                         Forms\Components\Select::make('project_id')
@@ -135,9 +136,9 @@ class NotificationSettingResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index' => Pages\ListNotificationSettings::route('/'),
+            'index'  => Pages\ListNotificationSettings::route('/'),
             'create' => Pages\CreateNotificationSetting::route('/create'),
-            'edit' => Pages\EditNotificationSetting::route('/{record}/edit'),
+            'edit'   => Pages\EditNotificationSetting::route('/{record}/edit'),
         ];
     }
 }

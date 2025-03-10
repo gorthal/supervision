@@ -119,7 +119,9 @@ class NotificationSettingsRelationManager extends RelationManager
                     ]),
             ])
             ->headerActions([
-                Tables\Actions\CreateAction::make(),
+                Tables\Actions\CreateAction::make()
+                    ->label('Ajouter')
+                    ->visible(fn ($livewire) => $livewire->ownerRecord->exists),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
