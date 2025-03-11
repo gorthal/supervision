@@ -43,7 +43,7 @@ class NotificationSettingResource extends Resource
 
                         Forms\Components\Toggle::make('is_active')
                             ->default(true)
-                            ->label('Active'),
+                            ->label('Notify on New'),
                     ])->columns(2),
 
                 Forms\Components\Section::make('Notification Triggers')
@@ -60,7 +60,7 @@ class NotificationSettingResource extends Resource
                         Forms\Components\Toggle::make('notify_info')
                             ->default(false)
                             ->label('Notify on Info'),
-                        Forms\Components\Select::make('frequency')
+                        Forms\Components\Select::make('notification_frequency')
                             ->options([
                                 'realtime' => 'Immediate',
                                 'hourly'   => 'Hourly Digest',
@@ -84,9 +84,7 @@ class NotificationSettingResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('name')
-                    ->searchable()
-                    ->sortable(),
+
                 Tables\Columns\TextColumn::make('email')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('project.name')
