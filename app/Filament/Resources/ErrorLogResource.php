@@ -100,6 +100,11 @@ class ErrorLogResource extends Resource
                     ->label('Notes')
                     ->maxLength(65535)
                     ->columnSpanFull(),
+                    
+                Forms\Components\Textarea::make('comment')
+                    ->label('Commentaire')
+                    ->maxLength(65535)
+                    ->columnSpanFull(),
             ]);
     }
 
@@ -378,6 +383,15 @@ class ErrorLogResource extends Resource
                     ->schema([
                         Infolists\Components\TextEntry::make('notes')
                             ->label('Notes')
+                            ->markdown()
+                            ->columnSpanFull(),
+                    ])
+                    ->collapsible(),
+                    
+                Infolists\Components\Section::make('Commentaires')
+                    ->schema([
+                        Infolists\Components\TextEntry::make('comment')
+                            ->label('Commentaire')
                             ->markdown()
                             ->columnSpanFull(),
                     ])
