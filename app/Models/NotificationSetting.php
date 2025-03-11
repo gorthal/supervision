@@ -33,4 +33,20 @@ class NotificationSetting extends Model
     {
         return $this->belongsTo(Project::class);
     }
+    
+    /**
+     * Determine if the notification should be sent for a given error level
+     *
+     * @param string $level
+     * @return bool
+     */
+    public function shouldNotifyForLevel(string $level): bool
+    {
+        return match (strtolower($level)) {
+            'error', 'critical', 'alert', 'emergency' => $this->notify_on_error,
+            'warning' => $this->notify_on_warning,
+            'info', 'notice', 'debug' => $this->notify_on_info,
+            default => false,
+        };
+    }
 }
