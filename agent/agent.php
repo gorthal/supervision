@@ -37,9 +37,24 @@ if (isset($config['ignore_errors']['patterns']) && is_array($config['ignore_erro
     $ignoreErrors = $config['ignore_errors']['patterns'];
 }
 
+// Patterns d'erreurs non pertinentes à filtrer
+$nonEssentialPatterns = [
+    '/^\s*View \#\d+ \/var\/www\/html\/.*\/artisan\(\d+\)\: .*->handle\(\)$/',
+    '/^\s*View \#\d+ \{main\}$/',
+    '/Memcached::getMulti\(\): Server .* failed with: Connection refused/',
+    '/Resource temporarily unavailable/'
+];
+
+// Ajout des patterns non essentiels au tableau d'erreurs à ignorer
+if (isset($config['ignore_errors']['patterns']) && is_array($config['ignore_errors']['patterns'])) {
+    $ignoreErrors = array_merge($ignoreErrors, $nonEssentialPatterns);
+} else {
+    $ignoreErrors = $nonEssentialPatterns;
+}
+
 // Pattern par défaut pour Laravel si aucun pattern spécifique n'est fourni
 if (empty($errorPatterns)) {
-    $errorPatterns['laravel_error'] = '/\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] (\w+)\.(\w+): (.*) in (.*):(\\d+)/';
+    $errorPatterns['laravel_error'] = '/\\[(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2})\\] (\\w+)\\.(\\w+): (.*) in (.*):(\\d+)/';
 }
 
 // Fonction pour trouver tous les projets Laravel
@@ -82,12 +97,46 @@ function findLaravelProjects($directory, $maxDepth, $currentDepth = 0)
     return $projects;
 }
 
+/**
+ * Normaliser le message d'erreur pour regrouper les erreurs similaires
+ * @param string $errorMessage
+ * @return string
+ */
+function normalizeErrorMessage($errorMessage)
+{
+    // Normaliser les identifiants d'utilisateur
+    $normalized = preg_replace('/"userId":\s*\d+/', '"userId":"[ID]"', $errorMessage);
+    
+    // Normaliser les IDs numériques dans les chemins de fichiers
+    $normalized = preg_replace('/\/\d+\//', '/[ID]/', $normalized);
+    
+    return $normalized;
+}
+
+/**
+ * Vérifie si un message d'erreur doit être ignoré
+ * @param string $errorMessage
+ * @param array $ignorePatterns
+ * @return bool
+ */
+function shouldIgnoreError($errorMessage, $ignorePatterns)
+{
+    foreach ($ignorePatterns as $pattern) {
+        if (preg_match($pattern, $errorMessage)) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
 // Fonction pour analyser les logs d'erreurs avec les patterns configurés
 function parseErrorLogs($logPath, $lastRunData, $errorPatterns, $ignoreErrors)
 {
     $errors      = [];
     $lastChecked = $lastRunData[$logPath] ?? 0;
     $currentTime = time();
+    $ignoredCount = 0;
 
     $logFiles = glob($logPath . '/*.log');
     foreach ($logFiles as $logFile) {
@@ -99,6 +148,12 @@ function parseErrorLogs($logPath, $lastRunData, $errorPatterns, $ignoreErrors)
             foreach ($lines as $line) {
                 // Ignorer les lignes vides
                 if (empty(trim($line))) {
+                    continue;
+                }
+
+                // Vérifier si le message correspond à un pattern à ignorer
+                if (shouldIgnoreError($line, $ignoreErrors)) {
+                    $ignoredCount++;
                     continue;
                 }
 
@@ -140,6 +195,9 @@ function parseErrorLogs($logPath, $lastRunData, $errorPatterns, $ignoreErrors)
                             else {
                                 $errorMessage = $errorData[4];
                             }
+                            
+                            // Normaliser le message d'erreur pour regrouper des erreurs similaires
+                            $errorMessage = normalizeErrorMessage($errorMessage);
 
                             $errors[] = [
                                 'project_name'  => basename(dirname($logPath)),
@@ -163,7 +221,7 @@ function parseErrorLogs($logPath, $lastRunData, $errorPatterns, $ignoreErrors)
                         $level        = 'error'; // Niveau par défaut
 
                         // Extraire l'heure si elle apparaît dans le format standard
-                        if (preg_match('/\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]/', $line, $timeMatches)) {
+                        if (preg_match('/\\[(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2})\\]/', $line, $timeMatches)) {
                             $timestamp = strtotime($timeMatches[1]);
                         }
 
@@ -172,6 +230,9 @@ function parseErrorLogs($logPath, $lastRunData, $errorPatterns, $ignoreErrors)
                             $filePath   = $fileMatches[1];
                             $lineNumber = (int) $fileMatches[2];
                         }
+                        
+                        // Normaliser le message d'erreur
+                        $errorMessage = normalizeErrorMessage($errorMessage);
 
                         // Vérifier si l'erreur est survenue après la dernière vérification
                         if ($timestamp > $lastChecked) {
@@ -191,8 +252,12 @@ function parseErrorLogs($logPath, $lastRunData, $errorPatterns, $ignoreErrors)
             }
         }
     }
+    
+    if ($ignoredCount > 0) {
+        echo "  $ignoredCount lignes de log filtrées comme non pertinentes\n";
+    }
 
-    return [$errors, $currentTime];
+    return [$errors, $currentTime, $ignoredCount];
 }
 
 // Fonction pour envoyer les erreurs au serveur central
@@ -360,10 +425,13 @@ echo "Projets Laravel trouvés: " . count($projects) . "\n";
 // Analyser les logs et envoyer les erreurs
 $newLastRunData = [];
 $allErrors      = [];
+$totalIgnoredCount = 0;
 
 foreach ($projects as $project) {
     echo "Analyse des logs pour {$project['name']}...\n";
-    list($errors, $currentTime) = parseErrorLogs($project['log_path'], $lastRunData, $errorPatterns, $ignoreErrors);
+    list($errors, $currentTime, $ignoredCount) = parseErrorLogs($project['log_path'], $lastRunData, $errorPatterns, $ignoreErrors);
+    
+    $totalIgnoredCount += $ignoredCount;
 
     if (!empty($errors)) {
         echo "  " . count($errors) . " nouvelles erreurs trouvées\n";
@@ -371,6 +439,11 @@ foreach ($projects as $project) {
     }
 
     $newLastRunData[$project['log_path']] = $currentTime;
+}
+
+// Afficher le total des erreurs ignorées
+if ($totalIgnoredCount > 0) {
+    echo "Total des messages d'erreur filtrés: $totalIgnoredCount\n";
 }
 
 // Envoyer les erreurs au serveur central
