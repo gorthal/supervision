@@ -21,6 +21,7 @@ class ErrorLog extends Model
         'occurrences',
         'status',
         'notes',
+        'comment',
     ];
 
     protected $casts = [
@@ -83,7 +84,7 @@ class ErrorLog extends Model
     public static function normalizeMessage(string $message): string
     {
         // Remplacer les identifiants d'utilisateur
-        $normalized = preg_replace('/"userId":\s*\d+/', '"userId":"[ID]"', $message);
+        $normalized = preg_replace('/\"userId\":\\s*\\d+/', '\"userId\":\"[ID]\"', $message);
         
         // Remplacer les IDs numériques dans les chemins de fichiers
         $normalized = preg_replace('/\/\d+\//', '/[ID]/', $normalized);
