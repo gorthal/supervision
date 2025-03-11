@@ -9,6 +9,7 @@ use Filament\Resources\Pages\ListRecords;
 use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\ErrorLogsExport;
+use Filament\Notifications\Notification;
 
 class ListErrorLogs extends ListRecords
 {
@@ -49,7 +50,10 @@ class ListErrorLogs extends ListRecords
                 ->action(function () {
                     $count = ErrorLog::where('status', '!=', 'resolved')->delete();
                     
-                    $this->notify('success', "{$count} erreurs ont été supprimées avec succès.");
+                    Notification::make()
+                        ->title("{$count} erreurs ont été supprimées avec succès.")
+                        ->success()
+                        ->send();
                 }),
         ];
     }
