@@ -3,6 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\ErrorLogResource\Pages;
+use App\Filament\Resources\ErrorLogResource\RelationManagers;
 use App\Models\ErrorLog;
 use App\Models\Project;
 use Filament\Forms;
@@ -11,6 +12,8 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Filament\Infolists;
+use Filament\Infolists\Infolist;
 
 class ErrorLogResource extends Resource
 {
@@ -132,12 +135,12 @@ class ErrorLogResource extends Resource
                     ->label('Fichier')
                     ->searchable()
                     ->limit(30)
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->toggleable(),
                     
                 Tables\Columns\TextColumn::make('line')
                     ->label('Ligne')
                     ->searchable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->toggleable(),
                     
                 Tables\Columns\TextColumn::make('environment')
                     ->label('Environnement')
@@ -225,6 +228,11 @@ class ErrorLogResource extends Resource
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\Action::make('findSimilarErrors')
+                    ->label('Erreurs similaires')
+                    ->icon('heroicon-o-document-duplicate')
+                    ->color('info')
+                    ->url(fn ($record) => static::getUrl('similar-errors', ['record' => $record])),
                 Tables\Actions\Action::make('markAsInProgress')
                     ->label('En cours')
                     ->icon('heroicon-o-arrow-path')
@@ -265,11 +273,116 @@ class ErrorLogResource extends Resource
                         ->icon('heroicon-o-x-mark')
                         ->color('gray')
                         ->action(fn ($records) => $records->each->markAsIgnored()),
+                    
+                    Tables\Actions\BulkAction::make('mergeSimilarErrors')
+                        ->label('Fusionner les erreurs similaires')
+                        ->icon('heroicon-o-document-duplicate')
+                        ->color('info')
+                        ->action(function ($records) {
+                            // Regrouper par combinaison de projet_id, file_path et line
+                            $groupedErrors = $records->groupBy(function ($error) {
+                                return "{$error->project_id}_{$error->file_path}_{$error->line}";
+                            });
+                            
+                            $mergedCount = 0;
+                            
+                            foreach ($groupedErrors as $group) {
+                                if ($group->count() > 1) {
+                                    // Trouver l'erreur la plus récente pour être le représentant du groupe
+                                    $primary = $group->sortByDesc('error_timestamp')->first();
+                                    $totalOccurrences = $primary->occurrences;
+                                    
+                                    // Fusionner les autres erreurs dans celle-ci
+                                    foreach ($group as $error) {
+                                        if ($error->id !== $primary->id) {
+                                            $totalOccurrences += $error->occurrences;
+                                            $error->delete();
+                                            $mergedCount++;
+                                        }
+                                    }
+                                    
+                                    // Mettre à jour le nombre d'occurrences
+                                    $primary->occurrences = $totalOccurrences;
+                                    $primary->save();
+                                }
+                            }
+                            
+                            return "Fusion réussie : $mergedCount erreurs similaires ont été fusionnées.";
+                        }),
                         
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ])
             ->defaultSort('error_timestamp', 'desc');
+    }
+    
+    public static function infolist(Infolist $infolist): Infolist
+    {
+        return $infolist
+            ->schema([
+                Infolists\Components\Section::make('Informations sur l\'erreur')
+                    ->schema([
+                        Infolists\Components\TextEntry::make('project.name')
+                            ->label('Projet'),
+                        Infolists\Components\TextEntry::make('environment')
+                            ->label('Environnement')
+                            ->badge(),
+                        Infolists\Components\TextEntry::make('level')
+                            ->label('Niveau')
+                            ->badge()
+                            ->color(fn (string $state): string => match ($state) {
+                                'debug' => 'gray',
+                                'info' => 'info',
+                                'notice' => 'success',
+                                'warning' => 'warning',
+                                'error', 'critical', 'alert', 'emergency' => 'danger',
+                                default => 'gray',
+                            }),
+                        Infolists\Components\TextEntry::make('status')
+                            ->label('Statut')
+                            ->badge()
+                            ->color(fn (string $state): string => match ($state) {
+                                'new' => 'danger',
+                                'in_progress' => 'warning',
+                                'resolved' => 'success',
+                                'ignored' => 'gray',
+                                default => 'gray',
+                            }),
+                    ])
+                    ->columns(4),
+                
+                Infolists\Components\Section::make('Détails de l\'erreur')
+                    ->schema([
+                        Infolists\Components\TextEntry::make('error_message')
+                            ->label('Message d\'erreur')
+                            ->columnSpanFull(),
+                        Infolists\Components\TextEntry::make('file_path')
+                            ->label('Fichier'),
+                        Infolists\Components\TextEntry::make('line')
+                            ->label('Ligne'),
+                    ]),
+                
+                Infolists\Components\Section::make('Statistiques')
+                    ->schema([
+                        Infolists\Components\TextEntry::make('occurrences')
+                            ->label('Nombre d\'occurrences'),
+                        Infolists\Components\TextEntry::make('error_timestamp')
+                            ->label('Dernière occurrence')
+                            ->dateTime('d/m/Y H:i:s'),
+                        Infolists\Components\TextEntry::make('created_at')
+                            ->label('Première détection')
+                            ->dateTime('d/m/Y H:i:s'),
+                    ]),
+                
+                Infolists\Components\Section::make('Notes')
+                    ->schema([
+                        Infolists\Components\TextEntry::make('notes')
+                            ->label('Notes')
+                            ->markdown()
+                            ->columnSpanFull(),
+                    ])
+                    ->collapsible(),
+            ]);
     }
 
     public static function getRelations(): array
@@ -286,6 +399,7 @@ class ErrorLogResource extends Resource
             'create' => Pages\CreateErrorLog::route('/create'),
             'view' => Pages\ViewErrorLog::route('/{record}'),
             'edit' => Pages\EditErrorLog::route('/{record}/edit'),
+            'similar-errors' => Pages\SimilarErrorLogs::route('/{record}/similar-errors'),
         ];
     }
 }
