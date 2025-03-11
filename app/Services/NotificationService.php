@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ErrorLog;
 use App\Models\NotificationSetting;
 use App\Notifications\ErrorOccurredNotification;
+use App\Notifications\ErrorDigestNotification;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 
@@ -20,7 +21,7 @@ class NotificationService
     {
         try {
             $settings = NotificationSetting::where('project_id', $errorLog->project_id)
-                ->where('frequency', 'realtime')
+                ->where('notification_frequency', 'realtime')
                 ->where('notify_new', true)
                 ->get();
 
@@ -55,13 +56,20 @@ class NotificationService
      */
     public function sendHourlyDigests()
     {
-        $settings = NotificationSetting::where('frequency', 'hourly')->get();
+        $settings = NotificationSetting::where('notification_frequency', 'hourly')
+            ->where('is_active', true)
+            ->get();
+
+        if ($settings->isEmpty()) {
+            Log::info('No active hourly notification settings found.');
+            return;
+        }
 
         foreach ($settings as $setting) {
             try {
                 $project = $setting->project;
                 
-                if (!$project->is_active) {
+                if (!$project || !$project->is_active) {
                     continue;
                 }
 
@@ -77,10 +85,6 @@ class NotificationService
 
                 // Filter errors based on settings
                 $filteredErrors = $errors->filter(function ($error) use ($setting) {
-                    if ($error->status === 'new' && !$setting->notify_new) {
-                        return false;
-                    }
-                    
                     return $setting->shouldNotifyForLevel($error->level);
                 });
 
@@ -89,6 +93,8 @@ class NotificationService
                 }
 
                 // Send digest notification
+                Log::info('Sending hourly digest to: ' . $setting->email);
+                
                 Notification::route('mail', $setting->email)
                     ->notify(new ErrorDigestNotification($project, $filteredErrors, 'hourly'));
 
@@ -108,13 +114,15 @@ class NotificationService
      */
     public function sendDailyDigests()
     {
-        $settings = NotificationSetting::where('frequency', 'daily')->get();
+        $settings = NotificationSetting::where('notification_frequency', 'daily')
+            ->where('is_active', true)
+            ->get();
 
         foreach ($settings as $setting) {
             try {
                 $project = $setting->project;
                 
-                if (!$project->is_active) {
+                if (!$project || !$project->is_active) {
                     continue;
                 }
 
@@ -130,10 +138,6 @@ class NotificationService
 
                 // Filter errors based on settings
                 $filteredErrors = $errors->filter(function ($error) use ($setting) {
-                    if ($error->status === 'new' && !$setting->notify_new) {
-                        return false;
-                    }
-                    
                     return $setting->shouldNotifyForLevel($error->level);
                 });
 
